@@ -61,8 +61,16 @@ webex-email-reminders --version
 | `--to-list` | Text file with email addresses to send to (one per line) |
 | `--hours` | Look back period in hours (default: 1) |
 | `--contacts` | Text file with email addresses to filter DMs |
+| `--include-all` | Include all messages in active spaces, not just mentions |
+| `--include-my-messages` | Include your own messages in DMs (excluded by default) |
 | `--dry-run` | Print email content to stdout without sending |
 | `--version` | Show version number |
+
+## Local Development
+
+```bash
+python3 webex_reminders.py --to-list recipients.txt --hours 3
+```
 
 ## Contacts File (optional)
 

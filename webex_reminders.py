@@ -23,7 +23,7 @@ def get_me(headers):
     return resp.json()
 
 
-def get_mentions(headers, since):
+def get_mentions(headers, since, include_all=False):
     """Get messages where you are mentioned across all spaces."""
     rooms_resp = requests.get(
         "https://webexapis.com/v1/rooms", headers=headers, params={"max": 50, "sortBy": "lastactivity"}
@@ -38,10 +38,14 @@ def get_mentions(headers, since):
         if room.get("type") == "direct":
             continue
 
+        params = {"roomId": room["id"], "max": 20}
+        if not include_all:
+            params["mentionedPeople"] = "me"
+
         msgs_resp = requests.get(
             "https://webexapis.com/v1/messages",
             headers=headers,
-            params={"roomId": room["id"], "mentionedPeople": "me", "max": 20},
+            params=params,
         )
         if msgs_resp.status_code != 200:
             continue
@@ -54,7 +58,7 @@ def get_mentions(headers, since):
     return messages
 
 
-def get_direct_messages(headers, since, contacts_file=None):
+def get_direct_messages(headers, since, my_email, contacts_file=None, include_my_messages=False):
     """Get direct messages from the last hour, optionally filtered by a contacts file."""
     allowed_emails = None
     if contacts_file and os.path.exists(contacts_file):
@@ -84,6 +88,8 @@ def get_direct_messages(headers, since, contacts_file=None):
             if created < since:
                 break
             sender = msg.get("personEmail", "").lower()
+            if not include_my_messages and sender == my_email.lower():
+                continue
             if allowed_emails and sender not in allowed_emails:
                 continue
             messages.append(msg)
@@ -93,6 +99,7 @@ def get_direct_messages(headers, since, contacts_file=None):
 
 def format_email_body(mentions, dms):
     """Format mentions and DMs into an HTML email body."""
+    local_tz = datetime.now().astimezone().tzinfo
     body = "<h2>Webex Summary - Last Hour</h2>"
 
     if mentions:
@@ -106,7 +113,8 @@ def format_email_body(mentions, dms):
             for msg in msgs:
                 sender = msg.get("personEmail", "unknown")
                 text = msg.get("text", "")[:200]
-                time = msg["created"][:16].replace("T", " ")
+                created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
+                time = created.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
                 body += f"<li><b>{sender}</b> ({time}): {text}</li>"
             body += "</ul>"
 
@@ -115,7 +123,8 @@ def format_email_body(mentions, dms):
         for msg in dms:
             sender = msg.get("personEmail", "unknown")
             text = msg.get("text", "")[:200]
-            time = msg["created"][:16].replace("T", " ")
+            created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
+            time = created.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
             body += f"<li><b>{sender}</b> ({time}): {text}</li>"
         body += "</ul>"
 
@@ -145,11 +154,13 @@ def send_email(to_email, subject, body):
 
 def main():
     parser = argparse.ArgumentParser(description="Webex Email Reminders")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.3.1")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.4.0")
     parser.add_argument("--hours", type=float, default=1, help="Look back period in hours (default: 1)")
     parser.add_argument("--to", help="Email address to send summary to")
     parser.add_argument("--to-list", help="Text file with email addresses to send to (one per line)")
     parser.add_argument("--contacts", help="Text file with email addresses to filter DMs (one per line)")
+    parser.add_argument("--include-all", action="store_true", help="Include all messages in active spaces, not just mentions")
+    parser.add_argument("--include-my-messages", action="store_true", help="Include your own messages in DMs (excluded by default)")
     parser.add_argument("--dry-run", action="store_true", help="Print summary without sending email")
     args = parser.parse_args()
 
@@ -161,10 +172,13 @@ def main():
 
     print(f"Checking Webex for activity since {since.isoformat()}...")
 
-    mentions = get_mentions(headers, since)
+    me = get_me(headers)
+    my_email = me.get("emails", [""])[0]
+
+    mentions = get_mentions(headers, since, include_all=args.include_all)
     print(f"  Found {len(mentions)} mention(s)")
 
-    dms = get_direct_messages(headers, since, args.contacts)
+    dms = get_direct_messages(headers, since, my_email, args.contacts, include_my_messages=args.include_my_messages)
     print(f"  Found {len(dms)} direct message(s)")
 
     if not mentions and not dms:
