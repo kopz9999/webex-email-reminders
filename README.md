@@ -60,6 +60,7 @@ webex-email-reminders --version
 | `--to` | Email address to send summary to |
 | `--to-list` | Text file with email addresses to send to (one per line) |
 | `--hours` | Look back period in hours (default: 1) |
+| `--minutes` | Look back period in minutes (overrides --hours) |
 | `--contacts` | Text file with email addresses to filter DMs |
 | `--include-all` | Include all messages in active spaces, not just mentions |
 | `--include-my-messages` | Include your own messages in DMs (excluded by default) |
@@ -79,4 +80,33 @@ One email per line to filter which DMs to include:
 ```
 person1@company.com
 person2@company.com
+```
+
+## Version Management
+
+When releasing a new version, update the version in these files:
+
+1. `pyproject.toml` — `version = "X.Y.Z"`
+2. `webex_reminders.py` — `version="%(prog)s X.Y.Z"`
+
+Then tag and deploy:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+./deploy.sh
+```
+
+## Deploy
+
+```bash
+./deploy.sh
+```
+
+## Crontab
+
+Run hourly during work hours (8am–6pm EST, Mon–Fri):
+
+```crontab
+0 8-18 * * 1-5 /path/to/your/reminders.sh
 ```
