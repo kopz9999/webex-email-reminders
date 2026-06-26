@@ -171,7 +171,7 @@ def main():
     since = datetime.now(timezone.utc) - timedelta(minutes=args.minutes if args.minutes else args.hours * 60)
     headers = get_webex_headers()
 
-    print(f"Checking Webex for activity since {since.isoformat()}...")
+    print(f"Checking Webex for activity since {since.astimezone().strftime('%Y-%m-%d %H:%M %Z')}...")
 
     me = get_me(headers)
     my_email = me.get("emails", [""])[0]
