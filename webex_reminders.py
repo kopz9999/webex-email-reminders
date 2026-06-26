@@ -145,6 +145,7 @@ def send_email(to_email, subject, body):
 
 def main():
     parser = argparse.ArgumentParser(description="Webex Email Reminders")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.3.1")
     parser.add_argument("--hours", type=float, default=1, help="Look back period in hours (default: 1)")
     parser.add_argument("--to", help="Email address to send summary to")
     parser.add_argument("--to-list", help="Text file with email addresses to send to (one per line)")

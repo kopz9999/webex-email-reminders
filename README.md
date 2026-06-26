@@ -1,5 +1,7 @@
 # Webex Email Reminders
 
+[![GitHub](https://img.shields.io/badge/GitHub-repo-blue)](https://github.com/kopz9999/webex-email-reminders)
+
 CLI tool that checks Webex for mentions and direct messages from the last hour and sends an email summary via Nylas.
 
 ## Prerequisites
@@ -9,6 +11,11 @@ CLI tool that checks Webex for mentions and direct messages from the last hour a
 
 ## Setup
 
+```bash
+pip install webex-email-reminders
+```
+
+Or install from source:
 ```bash
 pip install -r requirements.txt
 ```
@@ -25,26 +32,37 @@ export NYLAS_GRANT_ID="your-nylas-grant-id"
 
 ```bash
 # Send summary email
-python webex_reminders.py --to your@email.com
+webex-email-reminders --to your@email.com
+
+# Send to multiple recipients from a file
+webex-email-reminders --to-list recipients.txt
+
+# Both single and list
+webex-email-reminders --to your@email.com --to-list recipients.txt
 
 # Custom time window
-python webex_reminders.py --to your@email.com --hours 2
+webex-email-reminders --to your@email.com --hours 2
 
 # Filter DMs by contacts file
-python webex_reminders.py --to your@email.com --contacts contacts.txt
+webex-email-reminders --to your@email.com --contacts contacts.txt
 
 # Dry run (prints email content without sending)
-python webex_reminders.py --to your@email.com --dry-run
+webex-email-reminders --to your@email.com --dry-run
+
+# Check version
+webex-email-reminders --version
 ```
 
 ### Options
 
 | Flag | Description |
 |------|-------------|
-| `--to` | Email address to send summary to (required) |
+| `--to` | Email address to send summary to |
+| `--to-list` | Text file with email addresses to send to (one per line) |
 | `--hours` | Look back period in hours (default: 1) |
 | `--contacts` | Text file with email addresses to filter DMs |
 | `--dry-run` | Print email content to stdout without sending |
+| `--version` | Show version number |
 
 ## Contacts File (optional)
 

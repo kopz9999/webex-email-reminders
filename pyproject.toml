@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webex-email-reminders"
+version = "0.3.1"
+description = "CLI tool that monitors Webex mentions and DMs, sends email summaries via Nylas"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "nylas==6.2.0",
+    "requests==2.32.3",
+]
+
+[project.scripts]
+webex-reminders = "webex_reminders:main"
+webex-email-reminders = "webex_reminders:main"
