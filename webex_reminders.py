@@ -58,6 +58,48 @@ def get_mentions(headers, since, include_all=False):
     return messages
 
 
+def get_thread_replies(headers, since, my_id):
+    """Get replies to threads you started in active spaces."""
+    rooms_resp = requests.get(
+        "https://webexapis.com/v1/rooms", headers=headers, params={"max": 50, "sortBy": "lastactivity"}
+    )
+    rooms_resp.raise_for_status()
+
+    replies = []
+    for room in rooms_resp.json().get("items", []):
+        last_activity = datetime.fromisoformat(room["lastActivity"].replace("Z", "+00:00"))
+        if last_activity < since:
+            break
+        if room.get("type") == "direct":
+            continue
+
+        msgs_resp = requests.get(
+            "https://webexapis.com/v1/messages",
+            headers=headers,
+            params={"roomId": room["id"], "max": 50},
+        )
+        if msgs_resp.status_code != 200:
+            continue
+
+        messages = msgs_resp.json().get("items", [])
+        # Find thread parents I created
+        my_parent_ids = {
+            msg["id"] for msg in messages
+            if msg.get("personId") == my_id and not msg.get("parentId")
+        }
+
+        # Collect replies from others to my threads
+        for msg in messages:
+            created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
+            if created < since:
+                continue
+            if msg.get("parentId") in my_parent_ids and msg.get("personId") != my_id:
+                msg["_spaceName"] = room.get("title", "Unknown Space")
+                replies.append(msg)
+
+    return replies
+
+
 def get_direct_messages(headers, since, my_email, contacts_file=None, include_my_messages=False):
     """Get direct messages from the last hour, optionally filtered by a contacts file."""
     allowed_emails = None
@@ -97,8 +139,8 @@ def get_direct_messages(headers, since, my_email, contacts_file=None, include_my
     return messages
 
 
-def format_email_body(mentions, dms):
-    """Format mentions and DMs into an HTML email body."""
+def format_email_body(mentions, dms, thread_replies=None):
+    """Format mentions, DMs, and thread replies into an HTML email body."""
     local_tz = datetime.now().astimezone().tzinfo
     body = "<h2>Webex Summary - Last Hour</h2>"
 
@@ -106,6 +148,22 @@ def format_email_body(mentions, dms):
         body += "<h3>Mentions</h3>"
         grouped = {}
         for msg in mentions:
+            space = msg.get("_spaceName", "Unknown Space")
+            grouped.setdefault(space, []).append(msg)
+        for space, msgs in grouped.items():
+            body += f"<h4>{space}</h4><ul>"
+            for msg in msgs:
+                sender = msg.get("personEmail", "unknown")
+                text = msg.get("text", "")[:200]
+                created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
+                time = created.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
+                body += f"<li><b>{sender}</b> ({time}): {text}</li>"
+            body += "</ul>"
+
+    if thread_replies:
+        body += "<h3>Thread Replies</h3>"
+        grouped = {}
+        for msg in thread_replies:
             space = msg.get("_spaceName", "Unknown Space")
             grouped.setdefault(space, []).append(msg)
         for space, msgs in grouped.items():
@@ -128,7 +186,7 @@ def format_email_body(mentions, dms):
             body += f"<li><b>{sender}</b> ({time}): {text}</li>"
         body += "</ul>"
 
-    if not mentions and not dms:
+    if not mentions and not dms and not thread_replies:
         body += "<p>No new mentions or direct messages in the last hour.</p>"
 
     return body
@@ -154,7 +212,7 @@ def send_email(to_email, subject, body):
 
 def main():
     parser = argparse.ArgumentParser(description="Webex Email Reminders")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.5.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.6.0")
     parser.add_argument("--hours", type=float, default=1, help="Look back period in hours (default: 1)")
     parser.add_argument("--minutes", type=float, help="Look back period in minutes (overrides --hours)")
     parser.add_argument("--to", help="Email address to send summary to")
@@ -162,6 +220,7 @@ def main():
     parser.add_argument("--contacts", help="Text file with email addresses to filter DMs (one per line)")
     parser.add_argument("--include-all", action="store_true", help="Include all messages in active spaces, not just mentions")
     parser.add_argument("--include-my-messages", action="store_true", help="Include your own messages in DMs (excluded by default)")
+    parser.add_argument("--thread-replies", action="store_true", help="Include replies to threads you started")
     parser.add_argument("--dry-run", action="store_true", help="Print summary without sending email")
     args = parser.parse_args()
 
@@ -179,15 +238,23 @@ def main():
     mentions = get_mentions(headers, since, include_all=args.include_all)
     print(f"  Found {len(mentions)} mention(s)")
 
+    thread_replies = []
+    if args.thread_replies:
+        my_id = me.get("id", "")
+        thread_replies = get_thread_replies(headers, since, my_id)
+        print(f"  Found {len(thread_replies)} thread reply(ies)")
+
     dms = get_direct_messages(headers, since, my_email, args.contacts, include_my_messages=args.include_my_messages)
     print(f"  Found {len(dms)} direct message(s)")
 
-    if not mentions and not dms:
+    if not mentions and not dms and not thread_replies:
         print("Nothing to report.")
         return
 
-    body = format_email_body(mentions, dms)
+    body = format_email_body(mentions, dms, thread_replies)
     subject = f"Webex Summary - {len(mentions)} mention(s), {len(dms)} DM(s)"
+    if thread_replies:
+        subject += f", {len(thread_replies)} thread reply(ies)"
 
     recipients = []
     if args.to:
