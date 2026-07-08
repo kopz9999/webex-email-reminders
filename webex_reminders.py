@@ -232,7 +232,7 @@ def send_email(to_email, subject, body):
 
 def main():
     parser = argparse.ArgumentParser(description="Webex Email Reminders")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.6.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.7.0")
     parser.add_argument("--hours", type=float, default=1, help="Look back period in hours (default: 1)")
     parser.add_argument("--minutes", type=float, help="Look back period in minutes (overrides --hours)")
     parser.add_argument("--to", help="Email address to send summary to")
