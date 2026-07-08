@@ -38,10 +38,8 @@ def get_mentions(headers, since, include_all=False):
         if room.get("type") == "direct":
             continue
 
-        params = {"roomId": room["id"], "max": 20}
-        if not include_all:
-            params["mentionedPeople"] = "me"
-
+        # Always filter by mentionedPeople=me (this includes @All mentions)
+        params = {"roomId": room["id"], "max": 20, "mentionedPeople": "me"}
         msgs_resp = requests.get(
             "https://webexapis.com/v1/messages",
             headers=headers,
@@ -55,6 +53,28 @@ def get_mentions(headers, since, include_all=False):
             if created >= since:
                 msg["_spaceName"] = room.get("title", "Unknown Space")
                 messages.append(msg)
+
+        # If --include-all, also fetch messages that mention "All" but didn't trigger mentionedPeople=me
+        if include_all:
+            all_params = {"roomId": room["id"], "max": 50}
+            all_resp = requests.get(
+                "https://webexapis.com/v1/messages",
+                headers=headers,
+                params=all_params,
+            )
+            if all_resp.status_code != 200:
+                continue
+            existing_ids = {m["id"] for m in messages}
+            for msg in all_resp.json().get("items", []):
+                created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
+                if created < since:
+                    break
+                # Check if message mentions "All" (mentionedGroups contains "all")
+                if "all" in [g.lower() for g in msg.get("mentionedGroups", [])]:
+                    if msg["id"] not in existing_ids:
+                        msg["_spaceName"] = room.get("title", "Unknown Space")
+                        messages.append(msg)
+
     return messages
 
 
@@ -147,7 +167,7 @@ def format_email_body(mentions, dms, thread_replies=None):
     if mentions:
         body += "<h3>Mentions</h3>"
         grouped = {}
-        for msg in mentions:
+        for msg in sorted(mentions, key=lambda m: m["created"]):
             space = msg.get("_spaceName", "Unknown Space")
             grouped.setdefault(space, []).append(msg)
         for space, msgs in grouped.items():
@@ -163,7 +183,7 @@ def format_email_body(mentions, dms, thread_replies=None):
     if thread_replies:
         body += "<h3>Thread Replies</h3>"
         grouped = {}
-        for msg in thread_replies:
+        for msg in sorted(thread_replies, key=lambda m: m["created"]):
             space = msg.get("_spaceName", "Unknown Space")
             grouped.setdefault(space, []).append(msg)
         for space, msgs in grouped.items():
@@ -178,7 +198,7 @@ def format_email_body(mentions, dms, thread_replies=None):
 
     if dms:
         body += "<h3>Direct Messages</h3><ul>"
-        for msg in dms:
+        for msg in sorted(dms, key=lambda m: m["created"]):
             sender = msg.get("personEmail", "unknown")
             text = msg.get("text", "")[:200]
             created = datetime.fromisoformat(msg["created"].replace("Z", "+00:00"))
@@ -218,7 +238,7 @@ def main():
     parser.add_argument("--to", help="Email address to send summary to")
     parser.add_argument("--to-list", help="Text file with email addresses to send to (one per line)")
     parser.add_argument("--contacts", help="Text file with email addresses to filter DMs (one per line)")
-    parser.add_argument("--include-all", action="store_true", help="Include all messages in active spaces, not just mentions")
+    parser.add_argument("--include-all", action="store_true", help="Include messages where @All is mentioned in spaces")
     parser.add_argument("--include-my-messages", action="store_true", help="Include your own messages in DMs (excluded by default)")
     parser.add_argument("--thread-replies", action="store_true", help="Include replies to threads you started")
     parser.add_argument("--dry-run", action="store_true", help="Print summary without sending email")
