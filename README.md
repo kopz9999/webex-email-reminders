@@ -49,6 +49,12 @@ webex-email-reminders --to your@email.com --contacts contacts.txt
 # Dry run (prints email content without sending)
 webex-email-reminders --to your@email.com --dry-run
 
+# Include replies to threads you started
+webex-email-reminders --to your@email.com --thread-replies
+
+# Email errors instead of crashing (useful for cron jobs)
+webex-email-reminders --to your@email.com --email-errors
+
 # Check version
 webex-email-reminders --version
 ```
@@ -64,6 +70,8 @@ webex-email-reminders --version
 | `--contacts` | Text file with email addresses to filter DMs |
 | `--include-all` | Include all messages in active spaces, not just mentions |
 | `--include-my-messages` | Include your own messages in DMs (excluded by default) |
+| `--thread-replies` | Include replies to threads you started |
+| `--email-errors` | Email exceptions from Webex API calls to recipients instead of crashing (useful for cron) |
 | `--dry-run` | Print email content to stdout without sending |
 | `--version` | Show version number |
 

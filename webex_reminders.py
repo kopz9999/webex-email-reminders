@@ -241,6 +241,7 @@ def main():
     parser.add_argument("--include-all", action="store_true", help="Include messages where @All is mentioned in spaces")
     parser.add_argument("--include-my-messages", action="store_true", help="Include your own messages in DMs (excluded by default)")
     parser.add_argument("--thread-replies", action="store_true", help="Include replies to threads you started")
+    parser.add_argument("--email-errors", action="store_true", help="Email exceptions from Webex API calls to recipients instead of failing silently")
     parser.add_argument("--dry-run", action="store_true", help="Print summary without sending email")
     args = parser.parse_args()
 
@@ -250,22 +251,46 @@ def main():
     since = datetime.now(timezone.utc) - timedelta(minutes=args.minutes if args.minutes else args.hours * 60)
     headers = get_webex_headers()
 
+    # Collect recipients early so --email-errors can use them
+    recipients = []
+    if args.to:
+        recipients.append(args.to)
+    if args.to_list and os.path.exists(args.to_list):
+        with open(args.to_list) as f:
+            recipients.extend(line.strip() for line in f if line.strip())
+
     print(f"Checking Webex for activity since {since.astimezone().strftime('%Y-%m-%d %H:%M %Z')}...")
 
-    me = get_me(headers)
-    my_email = me.get("emails", [""])[0]
+    try:
+        me = get_me(headers)
+        my_email = me.get("emails", [""])[0]
 
-    mentions = get_mentions(headers, since, include_all=args.include_all)
-    print(f"  Found {len(mentions)} mention(s)")
+        mentions = get_mentions(headers, since, include_all=args.include_all)
+        print(f"  Found {len(mentions)} mention(s)")
 
-    thread_replies = []
-    if args.thread_replies:
-        my_id = me.get("id", "")
-        thread_replies = get_thread_replies(headers, since, my_id)
-        print(f"  Found {len(thread_replies)} thread reply(ies)")
+        thread_replies = []
+        if args.thread_replies:
+            my_id = me.get("id", "")
+            thread_replies = get_thread_replies(headers, since, my_id)
+            print(f"  Found {len(thread_replies)} thread reply(ies)")
 
-    dms = get_direct_messages(headers, since, my_email, args.contacts, include_my_messages=args.include_my_messages)
-    print(f"  Found {len(dms)} direct message(s)")
+        dms = get_direct_messages(headers, since, my_email, args.contacts, include_my_messages=args.include_my_messages)
+        print(f"  Found {len(dms)} direct message(s)")
+    except Exception as e:
+        if args.email_errors and recipients and not args.dry_run:
+            import traceback
+            error_body = (
+                "<h2>Webex Email Reminders - Error</h2>"
+                f"<p>An exception occurred while fetching Webex data:</p>"
+                f"<pre>{traceback.format_exc()}</pre>"
+            )
+            error_subject = f"Webex Reminders Error: {type(e).__name__}: {e}"
+            for recipient in recipients:
+                send_email(recipient, error_subject, error_body)
+            print(f"Error emailed to {', '.join(recipients)}: {e}", file=sys.stderr)
+            return
+        else:
+            raise
 
     if not mentions and not dms and not thread_replies:
         print("Nothing to report.")
@@ -275,13 +300,6 @@ def main():
     subject = f"Webex Summary - {len(mentions)} mention(s), {len(dms)} DM(s)"
     if thread_replies:
         subject += f", {len(thread_replies)} thread reply(ies)"
-
-    recipients = []
-    if args.to:
-        recipients.append(args.to)
-    if args.to_list and os.path.exists(args.to_list):
-        with open(args.to_list) as f:
-            recipients.extend(line.strip() for line in f if line.strip())
 
     if args.dry_run:
         print(f"\n--- DRY RUN ---\nTo: {', '.join(recipients)}\nSubject: {subject}\n\n{body}")
