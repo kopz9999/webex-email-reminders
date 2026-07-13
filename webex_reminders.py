@@ -279,6 +279,7 @@ def main():
     except Exception as e:
         if args.email_errors and recipients and not args.dry_run:
             import traceback
+            traceback.print_exc()
             error_body = (
                 "<h2>Webex Email Reminders - Error</h2>"
                 f"<p>An exception occurred while fetching Webex data:</p>"
@@ -287,7 +288,7 @@ def main():
             error_subject = f"Webex Reminders Error: {type(e).__name__}: {e}"
             for recipient in recipients:
                 send_email(recipient, error_subject, error_body)
-            print(f"Error emailed to {', '.join(recipients)}: {e}", file=sys.stderr)
+            print(f"Error emailed to {', '.join(recipients)}", file=sys.stderr)
             return
         else:
             raise
